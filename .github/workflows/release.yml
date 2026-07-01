@@ -88,6 +88,10 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
+      - name: Ad-hoc sign (macOS)
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - "target/${{ matrix.target }}/release/${BIN_NAME}"
+
       - name: Package (Unix)
         if: "!contains(matrix.target, 'windows')"
         shell: bash

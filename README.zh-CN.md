@@ -134,6 +134,15 @@ Options:
 
 不同 Agent 工具上报 usage 的方式略有差异（例如 Codex 每个回合上报一个累计总量，调用级别的用量是通过差值推算出来的；而 Claude/Pi/openclaw 则是每次调用单独上报，再由本工具累加）。本工具会将它们统一归一化为上述字段。
 
+## macOS："已损坏，无法打开" / 运行后文件消失
+
+提示"*agent-token-usage* 已损坏，无法打开"且只给"移到废纸篓"选项。这并不是文件真的损坏，下载后执行一次以下命令清除隔离标记即可：
+
+```bash
+xattr -dr com.apple.quarantine ./agent-token-usage
+chmod +x ./agent-token-usage
+```
+
 ## 开发
 
 ```bash

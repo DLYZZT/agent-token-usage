@@ -16,7 +16,7 @@ A small Rust CLI that reads the local session logs written by coding-agent CLIs 
 Requires a recent Rust toolchain (edition 2024).
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/DLYZZT/agent-token-usage
 cd agent-token-usage
 cargo build --release
 # binary at target/release/agent-token-usage
@@ -133,6 +133,15 @@ Every usage breakdown reports:
 - `total_tokens`
 
 Different agent tools report usage slightly differently (e.g. Codex reports a running total per turn and calls are derived as deltas, while Claude/Pi/openclaw report per-call usage that's accumulated). The CLI normalizes all of them into the fields above.
+
+## macOS: "cannot be opened" / file disappears after running
+
+This can show up as "*agent-token-usage* is damaged and can't be opened" with only a "Move to Trash" option. This isn't actual corruption — clear the quarantine flag once after downloading:
+
+```bash
+xattr -dr com.apple.quarantine ./agent-token-usage
+chmod +x ./agent-token-usage
+```
 
 ## Development
 
