@@ -194,10 +194,10 @@ pub fn parse_claude_file(path: &Path) -> UsageResult<SessionStats> {
             stats.model = Some(model);
         }
 
-        if let Some(message_id) = value_key(message.get("id")) {
-            if !seen_messages.insert(message_id) {
-                return;
-            }
+        if let Some(message_id) = value_key(message.get("id"))
+            && !seen_messages.insert(message_id)
+        {
+            return;
         }
 
         let usage = claude_usage_to_fields(message.get("usage"));
@@ -269,10 +269,10 @@ pub fn parse_pi_file(
 
                 let message_key =
                     value_key(message.get("responseId")).or_else(|| value_key(event.get("id")));
-                if let Some(message_key) = message_key {
-                    if !seen_messages.insert(message_key) {
-                        return;
-                    }
+                if let Some(message_key) = message_key
+                    && !seen_messages.insert(message_key)
+                {
+                    return;
                 }
 
                 stats.model = value_str(message.get("model")).or_else(|| current_model.clone());
@@ -508,12 +508,10 @@ fn read_opencode_call_counts(connection: &Connection) -> HashMap<String, usize> 
         where json_extract(data, '$.role') = 'assistant'
         group by session_id
         "#,
-    ) {
-        if let Ok(rows) = statement.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
-        }) {
-            return rows.filter_map(Result::ok).collect();
-        }
+    ) && let Ok(rows) = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
+    }) {
+        return rows.filter_map(Result::ok).collect();
     }
 
     let mut counts = HashMap::new();
