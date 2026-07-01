@@ -90,18 +90,8 @@ pub fn render_summary(sessions: &[SessionStats], scope: &str, source: &str) -> S
         scope,
         summary.sessions,
         summary.calls,
-        format_dt(
-            summary
-                .start
-                .as_deref()
-                .and_then(|value| parse_rfc3339(value))
-        ),
-        format_dt(
-            summary
-                .end
-                .as_deref()
-                .and_then(|value| parse_rfc3339(value))
-        ),
+        format_dt(summary.start.as_deref().and_then(parse_rfc3339)),
+        format_dt(summary.end.as_deref().and_then(parse_rfc3339)),
         format_int(usage.input_tokens),
         format_int(usage.cached_input_tokens),
         format_int(usage.uncached_input_tokens),
@@ -530,10 +520,10 @@ fn format_int(value: i64) -> String {
 fn compact_path(path: &Path) -> String {
     let home = env::var_os("HOME").map(PathBuf::from);
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    if let Some(home) = home {
-        if let Ok(relative) = resolved.strip_prefix(home) {
-            return format!("~/{}", relative.to_string_lossy());
-        }
+    if let Some(home) = home
+        && let Ok(relative) = resolved.strip_prefix(home)
+    {
+        return format!("~/{}", relative.to_string_lossy());
     }
     path.to_string_lossy().to_string()
 }

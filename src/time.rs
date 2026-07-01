@@ -46,15 +46,15 @@ pub fn parse_filter_time(value: Option<&str>, end: bool) -> Result<Option<DateTi
     let Some(value) = value else {
         return Ok(None);
     };
-    if value.len() == 10 {
-        if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-            let parsed = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-            return Ok(Some(if end {
-                parsed + chrono::Duration::days(1)
-            } else {
-                parsed
-            }));
-        }
+    if value.len() == 10
+        && let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+    {
+        let parsed = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
+        return Ok(Some(if end {
+            parsed + chrono::Duration::days(1)
+        } else {
+            parsed
+        }));
     }
     parse_timestamp(Some(value))
         .map(Some)
