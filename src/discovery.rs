@@ -127,8 +127,16 @@ fn expand_tilde(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-fn home_dir() -> PathBuf {
+pub fn home_dir() -> PathBuf {
     env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
         .map(PathBuf::from)
+        .or_else(|| {
+            let drive = env::var_os("HOMEDRIVE")?;
+            let path = env::var_os("HOMEPATH")?;
+            let mut combined = drive;
+            combined.push(path);
+            Some(PathBuf::from(combined))
+        })
         .unwrap_or_else(|| PathBuf::from("."))
 }

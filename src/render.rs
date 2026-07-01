@@ -2,8 +2,7 @@ use crate::model::{CallStats, SessionStats, Usage};
 use chrono::{DateTime, Local, Utc};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub type UsageResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -518,11 +517,9 @@ fn format_int(value: i64) -> String {
 }
 
 fn compact_path(path: &Path) -> String {
-    let home = env::var_os("HOME").map(PathBuf::from);
+    let home = crate::discovery::home_dir();
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    if let Some(home) = home
-        && let Ok(relative) = resolved.strip_prefix(home)
-    {
+    if let Ok(relative) = resolved.strip_prefix(&home) {
         return format!("~/{}", relative.to_string_lossy());
     }
     path.to_string_lossy().to_string()
