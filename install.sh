@@ -13,7 +13,7 @@ os="$(uname -s)"
 arch="$(uname -m)"
 
 case "$os" in
-  Linux) platform="unknown-linux-gnu" ;;
+  Linux) platform="unknown-linux-musl" ;;
   Darwin) platform="apple-darwin" ;;
   *)
     echo "Unsupported OS: $os" >&2
