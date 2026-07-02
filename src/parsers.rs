@@ -22,36 +22,41 @@ pub fn detect_format(path: &Path) -> UsageResult<String> {
     }
 
     let mut candidate_format = None;
-    let handle = File::open(path)?;
-    for line in BufReader::new(handle).lines() {
-        let line = line?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
+    let mut detected = None;
+    read_lines_lossy(path, |line| {
         let Ok(event) = serde_json::from_str::<Value>(line) else {
-            continue;
+            return true;
         };
         let event_type = event.get("type").and_then(Value::as_str);
         match event_type {
-            Some("session_meta" | "turn_context" | "event_msg") => return Ok("codex".to_string()),
+            Some("session_meta" | "turn_context" | "event_msg") => {
+                detected = Some("codex".to_string());
+                return false;
+            }
             Some("assistant" | "user") if event.get("message").is_some() => {
-                return Ok("claude".to_string());
+                detected = Some("claude".to_string());
+                return false;
             }
             Some("session") if event.get("version").and_then(Value::as_i64) == Some(3) => {
                 candidate_format = Some("pi".to_string());
             }
             Some("message") if event.get("message").is_some_and(Value::is_object) => {
                 let message = event.get("message").unwrap();
-                if message.get("api").is_some() {
-                    return Ok("openclaw".to_string());
-                }
-                return Ok("pi".to_string());
+                detected = Some(if message.get("api").is_some() {
+                    "openclaw".to_string()
+                } else {
+                    "pi".to_string()
+                });
+                return false;
             }
             _ => {}
         }
-    }
-    Ok(candidate_format.unwrap_or_else(|| "codex".to_string()))
+        true
+    })?;
+
+    Ok(detected
+        .or(candidate_format)
+        .unwrap_or_else(|| "codex".to_string()))
 }
 
 pub fn parse_session_files(path: &Path) -> UsageResult<Vec<SessionStats>> {
@@ -440,20 +445,38 @@ fn read_jsonl<F>(path: &Path, mut on_event: F) -> UsageResult<()>
 where
     F: FnMut(&Value, bool),
 {
-    let handle = File::open(path)?;
-    for line in BufReader::new(handle).lines() {
-        let line = line?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
+    read_lines_lossy(path, |line| {
         match serde_json::from_str::<Value>(line) {
             Ok(event) => on_event(&event, false),
             Err(_) => on_event(&Value::Null, true),
         }
+        true
+    })
+}
+
+// 逐行读取时对非 UTF-8 字节做 lossy 替换，避免单个坏字节让整个文件解析失败。
+// on_line 返回 false 时提前停止（供格式嗅探用）。
+fn read_lines_lossy<F>(path: &Path, mut on_line: F) -> UsageResult<()>
+where
+    F: FnMut(&str) -> bool,
+{
+    let handle = File::open(path)?;
+    let mut reader = BufReader::new(handle);
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        if reader.read_until(b'\n', &mut buffer)? == 0 {
+            return Ok(());
+        }
+        let text = String::from_utf8_lossy(&buffer);
+        let line = text.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if !on_line(line) {
+            return Ok(());
+        }
     }
-    Ok(())
 }
 
 fn read_json_file(path: &Path) -> (Value, usize) {

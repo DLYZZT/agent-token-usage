@@ -91,8 +91,14 @@ pub fn run(args: Args) -> UsageResult<String> {
     let has_multi_session_file = files.iter().any(|path| is_opencode_db(path));
     let parsed: Vec<Vec<SessionStats>> = files
         .par_iter()
-        .map(|path| parse_session_files(path))
-        .collect::<Result<Vec<_>, _>>()?;
+        .filter_map(|path| match parse_session_files(path) {
+            Ok(sessions) => Some(sessions),
+            Err(error) => {
+                eprintln!("warning: skipped {}: {error}", path.display());
+                None
+            }
+        })
+        .collect();
     let mut sessions = parsed.into_iter().flatten().collect::<Vec<_>>();
 
     if !args.all && has_multi_session_file {
