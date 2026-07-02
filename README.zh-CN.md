@@ -2,12 +2,12 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-一个用 Rust 编写的小工具，用于读取各类 Agent CLI（Codex、Claude Code、Pi、Grok、opencode、openclaw）在本地磁盘上写的会话日志，统计它们消耗的 token 数量。全程不发起任何网络请求、不需要任何 API Key，所有数据都来自你本机已有的日志文件。
+一个用 Rust 编写的小工具，用于读取各类 Agent CLI（Codex、Claude Code、Pi、Grok、opencode、openclaw、GitHub Copilot）在本地磁盘上写的会话日志，统计它们消耗的 token 数量。全程不发起任何网络请求、不需要任何 API Key，所有数据都来自你本机已有的日志文件。
 
 ## 特性
 
-- **多来源支持**：理解 Codex、Claude Code、Pi、Grok、opencode、openclaw 各自的本地会话格式，也支持 `all` 模式一次性扫描所有已知来源。
-- **多种统计范围**：默认只统计最近一次 Codex 会话；可用 `--all` 统计所有找到的会话，或用 `--since`/`--until` 按时间范围过滤。
+- **多来源支持**：理解 Codex、Claude Code、Pi、Grok、opencode、openclaw、GitHub Copilot 各自的本地会话格式，也支持 `all` 模式一次性扫描所有已知来源。
+- **多种统计范围**：默认只统计所有来源中最近一次会话；可用 `--all` 统计所有找到的会话，或用 `--since`/`--until` 按时间范围过滤。
 - **多种输出形式**：支持一次性汇总、按会话明细、按模型调用明细三种粒度，且都可以选择输出为 JSON 或 CSV 以便脚本处理。
 - **速度快**：使用 [rayon](https://crates.io/crates/rayon) 并行解析会话文件。
 
@@ -41,10 +41,10 @@ cargo run -- [参数]
 ## 快速开始
 
 ```bash
-# 统计最近一次 Codex 会话（默认行为）
+# 统计所有来源中最近一次会话（默认行为）
 agent-token-usage
 
-# 统计 Claude Code 的会话
+# 只统计 Claude Code 的会话
 agent-token-usage --source claude
 
 # 统计所有支持来源的所有会话
@@ -75,13 +75,14 @@ Total:    437,542
 
 | `--source`  | 默认目录                               | 磁盘格式 |
 |-------------|-----------------------------------------|----------|
-| `codex`     | `~/.codex/sessions`                     | JSONL（默认值） |
+| `codex`     | `~/.codex/sessions`                     | JSONL |
 | `claude`    | `~/.claude/projects`                    | JSONL |
 | `pi`        | `~/.pi/agent/sessions`                  | JSONL |
 | `grok`      | `~/.grok`                               | 同时包含 `summary.json` 和 `signals.json` 的目录 |
 | `opencode`  | `~/.local/share/opencode`               | SQLite（`opencode.db`） |
 | `openclaw`  | `~/.openclaw/agents/main/sessions`      | JSONL |
-| `all`       | 以上全部                                | — |
+| `copilot`   | `~/.copilot/session-state`              | JSONL（每个会话一个 `events.jsonl`） |
+| `all`       | 以上全部                                | —（默认值） |
 
 也可以不使用默认目录，直接传入一个或多个具体的文件/目录：
 
@@ -110,7 +111,7 @@ Arguments:
               省略时使用 --source 对应的默认目录。
 
 Options:
-      --source <SOURCE>  日志来源：codex、claude、pi、grok、opencode、openclaw 或 all
+      --source <SOURCE>  日志来源：codex、claude、pi、grok、opencode、openclaw、copilot 或 all
                           [默认值: codex]
       --latest           只统计最新会话（默认行为）
       --all              统计所有匹配到的会话，而不仅是最新的
@@ -143,6 +144,8 @@ Options:
 - `total_tokens`
 
 不同 Agent 工具上报 usage 的方式略有差异（例如 Codex 每个回合上报一个累计总量，调用级别的用量是通过差值推算出来的；而 Claude/Pi/openclaw 则是每次调用单独上报，再由本工具累加）。本工具会将它们统一归一化为上述字段。
+
+GitHub Copilot 的每条 assistant 消息只记录 `outputTokens`，完整的输入/缓存/推理明细来自 `session.shutdown` 事件里的按模型统计；未正常关闭的会话只能退化为累计的输出 token。
 
 ## macOS："已损坏，无法打开" / 运行后文件消失
 

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(
     name = "agent-token-usage",
-    about = "统计 Agent 会话日志中的 token 消耗。默认只统计最近一次 Codex 会话。"
+    about = "统计 Agent 会话日志中的 token 消耗。默认只统计最近一次所有会话。"
 )]
 pub struct Args {
     #[arg(help = "会话 JSONL 文件、OpenCode 数据库或目录，默认按 --source 选择目录")]
@@ -22,9 +22,9 @@ pub struct Args {
 
     #[arg(
         long,
-        value_parser = ["codex", "claude", "pi", "grok", "opencode", "openclaw", "all"],
-        default_value = "codex",
-        help = "日志来源：codex、claude、pi、grok、opencode、openclaw 或 all"
+        value_parser = ["codex", "claude", "pi", "grok", "opencode", "openclaw", "copilot", "all"],
+        default_value = "all",
+        help = "日志来源：codex、claude、pi、grok、opencode、openclaw、copilot 或 all"
     )]
     pub source: String,
 

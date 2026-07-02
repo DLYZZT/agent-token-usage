@@ -12,6 +12,7 @@ pub fn default_roots(source: &str) -> Vec<PathBuf> {
         "grok" => vec![grok_root()],
         "opencode" => vec![opencode_root()],
         "openclaw" => vec![openclaw_root()],
+        "copilot" => vec![copilot_root()],
         "all" => vec![
             codex_root(),
             claude_root(),
@@ -19,6 +20,7 @@ pub fn default_roots(source: &str) -> Vec<PathBuf> {
             grok_root(),
             opencode_root(),
             openclaw_root(),
+            copilot_root(),
         ],
         _ => vec![codex_root()],
     }
@@ -50,6 +52,10 @@ pub fn openclaw_root() -> PathBuf {
         .join("agents")
         .join("main")
         .join("sessions")
+}
+
+pub fn copilot_root() -> PathBuf {
+    home_dir().join(".copilot").join("session-state")
 }
 
 pub fn is_opencode_db(path: &Path) -> bool {

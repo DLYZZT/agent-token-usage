@@ -2,12 +2,12 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A small Rust CLI that reads the local session logs written by coding-agent CLIs (Codex, Claude Code, Pi, Grok, opencode, openclaw) and reports how many tokens they used — no network calls, no API keys, everything is computed from files already on your disk.
+A small Rust CLI that reads the local session logs written by coding-agent CLIs (Codex, Claude Code, Pi, Grok, opencode, openclaw, GitHub Copilot) and reports how many tokens they used — no network calls, no API keys, everything is computed from files already on your disk.
 
 ## Features
 
-- **Multi-source**: understands the on-disk session formats of Codex, Claude Code, Pi, Grok, opencode, and openclaw, plus an `all` mode that scans every known source at once.
-- **Multiple scopes**: defaults to your most recent Codex session; use `--all` to aggregate every session found, or `--since`/`--until` to filter by time range.
+- **Multi-source**: understands the on-disk session formats of Codex, Claude Code, Pi, Grok, opencode, openclaw, and GitHub Copilot, plus an `all` mode that scans every known source at once.
+- **Multiple scopes**: defaults to your most recent session across every supported source; use `--all` to aggregate every session found, or `--since`/`--until` to filter by time range.
 - **Multiple output shapes**: a one-shot summary, a per-session table, or a per-model-call table — each also available as JSON or CSV for scripting.
 - **Fast**: session files are parsed in parallel with [rayon](https://crates.io/crates/rayon).
 
@@ -41,10 +41,10 @@ cargo run -- [args]
 ## Quick start
 
 ```bash
-# Token usage for your most recent Codex session (default)
+# Token usage for your most recent session across all sources (default)
 agent-token-usage
 
-# Same, but for Claude Code
+# Only Claude Code
 agent-token-usage --source claude
 
 # All sessions across every supported source
@@ -75,13 +75,14 @@ Total:    437,542
 
 | `--source`  | Default root                          | On-disk format |
 |-------------|----------------------------------------|----------------|
-| `codex`     | `~/.codex/sessions`                    | JSONL (default) |
+| `codex`     | `~/.codex/sessions`                    | JSONL |
 | `claude`    | `~/.claude/projects`                   | JSONL |
 | `pi`        | `~/.pi/agent/sessions`                 | JSONL |
 | `grok`      | `~/.grok`                              | directories containing `summary.json` + `signals.json` |
 | `opencode`  | `~/.local/share/opencode`              | SQLite (`opencode.db`) |
 | `openclaw`  | `~/.openclaw/agents/main/sessions`     | JSONL |
-| `all`       | all of the above                       | — |
+| `copilot`   | `~/.copilot/session-state`             | JSONL (`events.jsonl` per session) |
+| `all`       | all of the above                       | — (default) |
 
 You can also pass one or more explicit files/directories instead of relying on the default root:
 
@@ -110,7 +111,7 @@ Arguments:
               Defaults to the --source's default directory when omitted.
 
 Options:
-      --source <SOURCE>  Log source: codex, claude, pi, grok, opencode, openclaw, or all
+      --source <SOURCE>  Log source: codex, claude, pi, grok, opencode, openclaw, copilot, or all
                           [default: codex]
       --latest           Only report the most recent session (default behavior)
       --all              Report every matching session instead of just the latest
@@ -143,6 +144,8 @@ Every usage breakdown reports:
 - `total_tokens`
 
 Different agent tools report usage slightly differently (e.g. Codex reports a running total per turn and calls are derived as deltas, while Claude/Pi/openclaw report per-call usage that's accumulated). The CLI normalizes all of them into the fields above.
+
+GitHub Copilot only records `outputTokens` on each assistant message; the full input/cache/reasoning breakdown comes from the `session.shutdown` event's per-model metrics. Sessions that didn't shut down cleanly therefore fall back to accumulated output tokens only.
 
 ## macOS: "cannot be opened" / file disappears after running
 

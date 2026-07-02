@@ -37,6 +37,16 @@ pub fn detect_format(path: &Path) -> UsageResult<String> {
                 detected = Some("claude".to_string());
                 return false;
             }
+            Some(
+                "session.start"
+                | "session.shutdown"
+                | "assistant.turn_start"
+                | "assistant.message"
+                | "user.message",
+            ) => {
+                detected = Some("copilot".to_string());
+                return false;
+            }
             Some("session") if event.get("version").and_then(Value::as_i64) == Some(3) => {
                 candidate_format = Some("pi".to_string());
             }
@@ -71,6 +81,7 @@ pub fn parse_session_file(path: &Path) -> UsageResult<SessionStats> {
     match detect_format(path)?.as_str() {
         "grok" => parse_grok_dir(path),
         "claude" => parse_claude_file(path),
+        "copilot" => parse_copilot_file(path),
         "openclaw" => parse_openclaw_file(path),
         "pi" => parse_pi_file(path, pi_usage_to_fields),
         _ => parse_codex_file(path),
@@ -305,6 +316,90 @@ pub fn parse_pi_file(
     Ok(stats)
 }
 
+pub fn parse_copilot_file(path: &Path) -> UsageResult<SessionStats> {
+    let mut stats = SessionStats::new(path.to_path_buf());
+    stats.provider = Some("github".to_string());
+    let mut seen_messages = HashSet::new();
+    let mut running = Usage::default();
+    let mut shutdown_usage: Option<Usage> = None;
+
+    read_jsonl(path, |event, malformed| {
+        if malformed {
+            stats.malformed_lines += 1;
+            return;
+        }
+
+        let timestamp = parse_timestamp(value_str(event.get("timestamp")).as_deref());
+        if let Some(timestamp) = timestamp {
+            stats.start.get_or_insert(timestamp);
+            stats.end = Some(timestamp);
+        }
+
+        let Some(data) = event.get("data").filter(|value| value.is_object()) else {
+            return;
+        };
+
+        match event.get("type").and_then(Value::as_str) {
+            Some("session.start") => {
+                assign_string(&mut stats.session_id, data.get("sessionId"));
+                assign_string(&mut stats.cli_version, data.get("copilotVersion"));
+                if let Some(context) = data.get("context").filter(|value| value.is_object()) {
+                    assign_string(&mut stats.cwd, context.get("cwd"));
+                }
+                if stats.start.is_none() {
+                    stats.start = parse_timestamp(value_str(data.get("startTime")).as_deref());
+                }
+            }
+            Some("session.model_change") => {
+                assign_string(&mut stats.model, data.get("newModel"));
+            }
+            Some("assistant.message") => {
+                if let Some(message_id) = value_key(data.get("messageId"))
+                    && !seen_messages.insert(message_id)
+                {
+                    return;
+                }
+
+                // assistant.message 只带 outputTokens；输入侧只有 session.shutdown 才有。
+                let output = int_value(data.get("outputTokens")).unwrap_or(0);
+                if output <= 0 {
+                    return;
+                }
+                let usage = Usage {
+                    output_tokens: output,
+                    total_tokens: output,
+                    ..Usage::default()
+                };
+                running = running.add(&usage);
+                stats.calls.push(CallStats {
+                    timestamp,
+                    usage,
+                    running_total: running.clone(),
+                    context_window: None,
+                });
+            }
+            Some("session.shutdown") => {
+                assign_string(&mut stats.model, data.get("currentModel"));
+                if let Some(metrics) = data.get("modelMetrics").and_then(Value::as_object) {
+                    let mut total = Usage::default();
+                    for model_metrics in metrics.values() {
+                        total = total.add(&copilot_usage_to_fields(model_metrics.get("usage")));
+                    }
+                    if total.total_tokens > 0 {
+                        shutdown_usage = Some(total);
+                    }
+                }
+            }
+            _ => {}
+        }
+    })?;
+
+    // 只有 session.shutdown 的 modelMetrics 有完整的输入/缓存统计；
+    // 会话未正常关闭时退化为累计的 outputTokens。
+    stats.usage = shutdown_usage.unwrap_or(running);
+    Ok(stats)
+}
+
 pub fn parse_openclaw_file(path: &Path) -> UsageResult<SessionStats> {
     parse_pi_file(path, openclaw_usage_to_fields)
 }
@@ -400,6 +495,22 @@ pub fn claude_usage_to_fields(raw: Option<&Value>) -> Usage {
         output_tokens: output,
         reasoning_output_tokens: 0,
         total_tokens: new_input + cache_creation + cache_read + output,
+    }
+}
+
+pub fn copilot_usage_to_fields(raw: Option<&Value>) -> Usage {
+    // inputTokens 已经包含 cacheRead/cacheWrite，不再叠加。
+    let input = int_value(raw.and_then(|raw| raw.get("inputTokens"))).unwrap_or(0);
+    let cache_read = int_value(raw.and_then(|raw| raw.get("cacheReadTokens"))).unwrap_or(0);
+    let output = int_value(raw.and_then(|raw| raw.get("outputTokens"))).unwrap_or(0);
+    let reasoning = int_value(raw.and_then(|raw| raw.get("reasoningTokens"))).unwrap_or(0);
+
+    Usage {
+        input_tokens: input,
+        cached_input_tokens: cache_read,
+        output_tokens: output,
+        reasoning_output_tokens: reasoning,
+        total_tokens: input + output,
     }
 }
 

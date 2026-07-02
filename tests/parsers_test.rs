@@ -38,6 +38,15 @@ const OPENCLAW_FIXTURE: &str = r#"
 {"type":"message","timestamp":"2026-06-30T07:00:00Z","id":"m1","message":{"role":"assistant","api":"anthropic","provider":"anthropic","model":"claude-opus-4-8","usage":{"input":100,"cacheRead":40,"cacheWrite":0,"output":30,"totalTokens":9999}}}
 "#;
 
+const COPILOT_FIXTURE: &str = r#"
+{"type":"session.start","timestamp":"2026-06-30T06:00:00Z","data":{"sessionId":"cp-1","copilotVersion":"1.0.24","startTime":"2026-06-30T06:00:00Z","context":{"cwd":"/tmp/p"}}}
+{"type":"session.model_change","timestamp":"2026-06-30T06:00:01Z","data":{"newModel":"claude-sonnet-4.6"}}
+{"type":"assistant.message","timestamp":"2026-06-30T06:00:05Z","data":{"messageId":"am-1","content":"hi","outputTokens":18}}
+{"type":"assistant.message","timestamp":"2026-06-30T06:00:06Z","data":{"messageId":"am-1","content":"hi","outputTokens":18}}
+{"type":"assistant.message","timestamp":"2026-06-30T06:00:07Z","data":{"messageId":"am-2","content":"more","outputTokens":30}}
+{"type":"session.shutdown","timestamp":"2026-06-30T06:01:00Z","data":{"currentModel":"claude-sonnet-4.6","modelMetrics":{"claude-sonnet-4.6":{"requests":{"count":2,"cost":2},"usage":{"inputTokens":21445,"outputTokens":48,"cacheReadTokens":9000,"cacheWriteTokens":12442,"reasoningTokens":5}}}}}
+"#;
+
 #[test]
 fn detects_each_jsonl_format() {
     let dir = TempDir::new().unwrap();
@@ -46,6 +55,7 @@ fn detects_each_jsonl_format() {
         ("claude.jsonl", CLAUDE_FIXTURE, "claude"),
         ("pi.jsonl", PI_FIXTURE, "pi"),
         ("openclaw.jsonl", OPENCLAW_FIXTURE, "openclaw"),
+        ("events.jsonl", COPILOT_FIXTURE, "copilot"),
     ];
     for (name, fixture, expected) in cases {
         let path = write_fixture(&dir, name, fixture);
@@ -160,6 +170,57 @@ fn openclaw_recomputes_total_tokens() {
     assert_eq!(stats.usage.output_tokens, 30);
     // openclaw 忽略来源的 totalTokens(9999)，重算为 input + output。
     assert_eq!(stats.usage.total_tokens, 170);
+}
+
+#[test]
+fn parses_copilot_shutdown_totals_and_dedupes_message_ids() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(&dir, "events.jsonl", COPILOT_FIXTURE);
+    let stats = parse_session_file(&path).unwrap();
+
+    assert_eq!(stats.session_id.as_deref(), Some("cp-1"));
+    assert_eq!(stats.provider.as_deref(), Some("github"));
+    assert_eq!(stats.model.as_deref(), Some("claude-sonnet-4.6"));
+    assert_eq!(stats.cli_version.as_deref(), Some("1.0.24"));
+    assert_eq!(stats.cwd.as_deref(), Some("/tmp/p"));
+    assert_eq!(
+        stats.start,
+        Some(Utc.with_ymd_and_hms(2026, 6, 30, 6, 0, 0).unwrap())
+    );
+    assert_eq!(
+        stats.end,
+        Some(Utc.with_ymd_and_hms(2026, 6, 30, 6, 1, 0).unwrap())
+    );
+
+    // am-1 重复出现一次，应被去重：只剩 2 次调用。
+    assert_eq!(stats.calls.len(), 2);
+    assert_eq!(stats.calls[0].usage.output_tokens, 18);
+    assert_eq!(stats.calls[1].usage.output_tokens, 30);
+
+    // 会话总量取自 session.shutdown 的 modelMetrics（inputTokens 已含缓存）。
+    assert_eq!(stats.usage.input_tokens, 21445);
+    assert_eq!(stats.usage.cached_input_tokens, 9000);
+    assert_eq!(stats.usage.output_tokens, 48);
+    assert_eq!(stats.usage.reasoning_output_tokens, 5);
+    assert_eq!(stats.usage.total_tokens, 21493);
+}
+
+#[test]
+fn copilot_without_shutdown_falls_back_to_output_tokens() {
+    let dir = TempDir::new().unwrap();
+    let truncated = COPILOT_FIXTURE
+        .lines()
+        .filter(|line| !line.contains("session.shutdown"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let path = write_fixture(&dir, "events.jsonl", &truncated);
+    let stats = parse_session_file(&path).unwrap();
+
+    // 没有 shutdown 事件时只能拿到累计的 outputTokens。
+    assert_eq!(stats.calls.len(), 2);
+    assert_eq!(stats.usage.input_tokens, 0);
+    assert_eq!(stats.usage.output_tokens, 48);
+    assert_eq!(stats.usage.total_tokens, 48);
 }
 
 #[test]
