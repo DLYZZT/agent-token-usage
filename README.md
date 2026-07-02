@@ -13,6 +13,16 @@ A small Rust CLI that reads the local session logs written by coding-agent CLIs 
 
 ## Installation
 
+### Quick install (macOS/Linux)
+
+Downloads the latest release binary into `~/.local/bin` and adds an `atu` shortcut:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DLYZZT/agent-token-usage/main/install.sh | bash
+```
+
+### From source
+
 Requires a recent Rust toolchain (edition 2024).
 
 ```bash

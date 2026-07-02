@@ -13,6 +13,16 @@
 
 ## 安装
 
+### 快速安装（macOS/Linux）
+
+自动下载最新发布的二进制文件到 `~/.local/bin`，并额外创建一个 `atu` 短命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DLYZZT/agent-token-usage/main/install.sh | bash
+```
+
+### 从源码构建
+
 需要较新版本的 Rust 工具链（edition 2024）。
 
 ```bash
